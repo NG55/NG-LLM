@@ -639,19 +639,20 @@ jobs:
                   adapter.notifyDataSetChanged()
                   binding.rvChat.scrollToPosition(messages.size - 1)
               }'''
-          new = '''    private fun reloadRecycleView() {
-                  adapter.notifyDataSetChanged()
-                  binding.rvChat.post {
-                      binding.rvChat.postOnAnimation {
-                          val lastPosition = adapter.itemCount - 1
-                          if (lastPosition >= 0) binding.rvChat.scrollToPosition(lastPosition)
-                      }
-                  }
-              }'''
-          if old in source:
-              source = source.replace(old, new, 1)
-          else:
-              raise SystemExit("reloadRecycleView block not found")
+          pattern = r'(?ms)^    private fun reloadRecycleView\(\) \{\n.*?^    \}'
+new = '''    private fun reloadRecycleView() {
+        adapter.notifyDataSetChanged()
+        binding.rvChat.post {
+            binding.rvChat.postOnAnimation {
+                val lastPosition = adapter.itemCount - 1
+                if (lastPosition >= 0) binding.rvChat.scrollToPosition(lastPosition)
+            }
+        }
+    }'''
+
+source, count = re.subn(pattern, lambda _: new, source, count=1)
+if count != 1:
+    raise SystemExit("reloadRecycleView block not found")
 
           activity.write_text(source)
           print("Chat scrolling, colors and controls updated")
