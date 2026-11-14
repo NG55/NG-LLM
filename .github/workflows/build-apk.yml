@@ -27,40 +27,70 @@ jobs:
           sparse-checkout: geniex_chat_android
           sparse-checkout-cone-mode: true
 
-      - name: Customize NG LLM
+         - name: Customize NG LLM
         working-directory: qai-hub-apps/geniex_chat_android
         shell: bash
         run: |
           set -e
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
           root = Path("src/main")
+          res = root / "res"
+
           manifest = root / "AndroidManifest.xml"
-          strings = root / "res/values/strings.xml"
+          strings = res / "values/strings.xml"
+          themes = res / "values/themes.xml"
+          colors = res / "values/colors.xml"
 
-          if not manifest.exists() or not strings.exists():
-              raise SystemExit("Required Android files not found")
-
-          text = manifest.read_text()
-          old = "Theme.MaterialComponents.Light.NoActionBar"
-          if old not in text:
-              raise SystemExit("Original theme not found in manifest")
-          manifest.write_text(text.replace(
-              old, "Theme.MaterialComponents.NoActionBar"
-          ))
+          for file in (manifest, strings, themes, colors):
+              if not file.exists():
+                  raise SystemExit(f"Required file not found: {file}")
 
           text = strings.read_text()
-          import re
           text, count = re.subn(
               r'(<string name="app_name">).*?(</string>)',
-              r'\1NG LLM\2',
-              text,
-              count=1
+              r'\1NG LLM\2', text, count=1
           )
           if count == 0:
-              raise SystemExit("app_name string not found")
+              raise SystemExit("app_name not found")
           strings.write_text(text)
+
+          text = themes.read_text()
+          text = text.replace(
+              "android:Theme.Material.Light.NoActionBar",
+              "android:Theme.Material.NoActionBar"
+          )
+          text = text.replace(
+              "Theme.Design.Light.BottomSheetDialog",
+              "Theme.Design.BottomSheetDialog"
+          )
+          themes.write_text(text)
+
+          text = colors.read_text()
+          text = re.sub(
+              r'(<color name="bg_normal">).*?(</color>)',
+              r'\1#FF121212\2', text
+          )
+          text = re.sub(
+              r'(<color name="font_black">).*?(</color>)',
+              r'\1#FFF1F1F1\2', text
+          )
+          colors.write_text(text)
+
+          for folder in ("layout", "drawable"):
+              directory = res / folder
+              if not directory.exists():
+                  continue
+              for file in directory.rglob("*.xml"):
+                  text = file.read_text()
+                  text = text.replace("#F6F7F9", "#FF121212")
+                  text = text.replace("#1F1F1F", "#FFF1F1F1")
+                  text = text.replace("#E7E7E7", "#FF333333")
+                  file.write_text(text)
+
+          print("NG LLM dark theme customization applied")
           PY
 
       - name: Setup Java
