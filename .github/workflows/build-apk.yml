@@ -398,6 +398,109 @@ jobs:
           print("NG LLM: SDK 0.3.20 and local GGUF import patched")
           PY
 
+      
+      - name: Add NG LLM Settings
+        working-directory: qai-hub-apps/geniex_chat_android
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          root = Path("src/main")
+          activity = root / "java/com/geniex/demo/MainActivity.kt"
+          layout = root / "res/layout/activity_main.xml"
+
+          s = activity.read_text()
+
+          def replace_once(old, new, label):
+              global s
+              if old not in s:
+                  raise SystemExit(f"Cannot find {label}")
+              s = s.replace(old, new, 1)
+
+          replace_once(
+              "    private lateinit var btnDownload: Button\n",
+              "    private lateinit var btnDownload: Button\n    private lateinit var btnSettings: Button\n",
+              "btnDownload declaration"
+          )
+
+          replace_once(
+              "        btnDownload = findViewById(R.id.btn_download)\n",
+              "        btnDownload = findViewById(R.id.btn_download)\n        btnSettings = findViewById(R.id.btn_settings)\n",
+              "btnDownload initialization"
+          )
+
+          replace_once(
+              "    private fun setListeners() {\n",
+              "    private fun setListeners() {\n        btnSettings.setOnClickListener { showSettingsDialog() }\n",
+              "setListeners"
+          )
+
+          replace_once(
+              "nCtx=1024,",
+              'nCtx = getSharedPreferences("ng_llm_settings", MODE_PRIVATE).getInt("context_length", 4096),',
+              "LLM context length"
+          )
+
+          marker = "    private fun parseModelList()"
+          if marker not in s:
+              raise SystemExit("Cannot find parseModelList")
+
+          helper = '''
+              private fun showSettingsDialog() {
+                  val values = arrayOf("2048", "4096", "8192")
+                  val prefs = getSharedPreferences("ng_llm_settings", MODE_PRIVATE)
+                  val current = prefs.getInt("context_length", 4096)
+                  val selected = values.indexOf(current.toString()).coerceAtLeast(0)
+
+                  AlertDialog.Builder(this)
+                      .setTitle("NG LLM Settings")
+                      .setSingleChoiceItems(values, selected) { dialog, which ->
+                          val contextLength = values[which].toInt()
+                          prefs.edit().putInt("context_length", contextLength).apply()
+                          Toast.makeText(
+                              this,
+                              "Context Length saved: $contextLength. Reload the model to apply.",
+                              Toast.LENGTH_LONG
+                          ).show()
+                          dialog.dismiss()
+                      }
+                      .setNegativeButton("Close", null)
+                      .show()
+              }
+
+          '''
+
+          s = s.replace(marker, helper + marker, 1)
+          activity.write_text(s)
+
+          x = layout.read_text()
+          anchor = '            <Button\n                android:id="@+id/btn_download"'
+          button = '''            <Button
+                android:id="@+id/btn_settings"
+                android:layout_width="wrap_content"
+                android:layout_height="26dp"
+                android:layout_marginStart="8dp"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/btn_rounded_border"
+                android:text="Settings"
+                android:textAllCaps="false"
+                android:textColor="#FFF1F1F1" />
+
+          '''
+
+          if anchor not in x:
+              raise SystemExit("Cannot find Download button in layout")
+
+          x = x.replace(anchor, button + anchor, 1)
+          layout.write_text(x)
+
+          print("NG LLM Settings added successfully")
+          PY
+
+
+
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
