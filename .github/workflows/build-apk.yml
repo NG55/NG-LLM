@@ -116,7 +116,287 @@ jobs:
           print("NG LLM dark interface updated")
           PY
 
+       - name: Add GGUF import and update GenieX SDK
+        working-directory: qai-hub-apps/geniex_chat_android
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
 
+          root = Path("src/main")
+
+          def patch(path, old, new):
+              p = root / path
+              s = p.read_text()
+              if old not in s:
+                  raise SystemExit(f"Pattern not found: {path}: {old[:80]}")
+              p.write_text(s.replace(old, new, 1))
+
+          # SDK version
+          p = Path("build.gradle")
+          s = p.read_text()
+          old = "com.qualcomm.qti:geniex-android:0.3.5"
+          if old not in s:
+              raise SystemExit("SDK 0.3.5 dependency not found")
+          p.write_text(s.replace(old, "com.qualcomm.qti:geniex-android:0.3.20", 1))
+
+          # Fix API differences between sample and SDK 0.3.20
+          p = root / "java/com/geniex/demo/MainActivity.kt"
+          s = p.read_text()
+          s, n1 = re.subn(r"^\s*model_name = paths\.model_name,\n", "", s, flags=re.M)
+          s, n2 = re.subn(r",\s*enable_thinking = enableThinking", "", s)
+          if n1 != 2 or n2 < 3:
+              raise SystemExit(f"Unexpected MainActivity API patterns: model_name={n1}, thinking={n2}")
+          p.write_text(s)
+
+          p = root / "java/com/geniex/demo/GenerationConfigSample.kt"
+          s = p.read_text()
+          s, n1 = re.subn(r"^\s*var nPast: Int = 0,\n", "", s, flags=re.M)
+          s, n2 = re.subn(r"^\s*nPast = this\.nPast,\n", "", s, flags=re.M)
+          if n1 != 1 or n2 != 1:
+              raise SystemExit("GenerationConfigSample API patterns not found")
+          p.write_text(s)
+
+          # Imports
+          patch(
+              "java/com/geniex/demo/MainActivity.kt",
+              "import android.content.Intent\n",
+              "import android.content.Intent\nimport android.provider.OpenableColumns\n"
+          )
+          patch(
+              "java/com/geniex/demo/MainActivity.kt",
+              "import androidx.appcompat.app.AlertDialog\n",
+              "import androidx.activity.result.contract.ActivityResultContracts\nimport androidx.appcompat.app.AlertDialog\n"
+          )
+          patch(
+              "java/com/geniex/demo/MainActivity.kt",
+              "import com.geniex.sdk.bean.ModelPullInput\n",
+              "import com.geniex.sdk.bean.ModelPullInput\nimport com.geniex.sdk.bean.ModelType\n"
+          )
+
+          # Import button field and picker
+          patch(
+              "java/com/geniex/demo/MainActivity.kt",
+              "    private lateinit var btnDownload: Button\n",
+              "    private lateinit var btnDownload: Button\n    private lateinit var btnImportModel: Button\n"
+          )
+          patch(
+              "java/com/geniex/demo/MainActivity.kt",
+              "    private val modelScope = CoroutineScope(Dispatchers.IO)\n",
+              """    private val modelScope = CoroutineScope(Dispatchers.IO)
+              private var importJob: Job? = null
+              private val importModelPicker =
+                  registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+                      if (uris.isNotEmpty()) importLocalModel(uris)
+                  }
+          """
+          )
+
+          # Initialize the new button
+          patch(
+              "java/com/geniex/demo/MainActivity.kt",
+              "        btnDownload = findViewById(R.id.btn_download)\n",
+              "        btnDownload = findViewById(R.id.btn_download)\n        btnImportModel = findViewById(R.id.btn_import_model)\n"
+          )
+
+          # Refactor spinner adapter so imported models can be added
+          p = root / "java/com/geniex/demo/MainActivity.kt"
+          s = p.read_text()
+          pattern = r"        spModelList\.adapter =\n            object : SimpleAdapter\(.*?\n            \}\n        spModelList\.onItemSelectedListener ="
+          s, count = re.subn(
+              pattern,
+              "        refreshModelSpinner()\n        spModelList.onItemSelectedListener =",
+              s,
+              count=1,
+              flags=re.S
+          )
+          if count != 1:
+              raise SystemExit("Model spinner block not found")
+          helper = '''
+              private fun refreshModelSpinner(selectedId: String? = null) {
+                  spModelList.adapter =
+                      object : SimpleAdapter(
+                          this,
+                          modelList.map {
+                              val map = mutableMapOf<String, String>()
+                              map["displayName"] = it.displayName
+                              map
+                          },
+                          R.layout.item_model,
+                          arrayOf("displayName"),
+                          intArrayOf(R.id.tv_model_id),
+                      ) {}
+                  if (selectedId != null) {
+                      val index = modelList.indexOfFirst { it.id == selectedId }
+                      if (index >= 0) spModelList.setSelection(index)
+                  }
+              }
+
+              private fun queryModelFileName(uri: android.net.Uri): String {
+                  var name: String? = null
+                  contentResolver.query(
+                      uri,
+                      arrayOf(OpenableColumns.DISPLAY_NAME),
+                      null, null, null
+                  )?.use { cursor ->
+                      if (cursor.moveToFirst()) name = cursor.getString(0)
+                  }
+                  return name?.takeIf { it.isNotBlank() }
+                      ?: "model_${System.currentTimeMillis()}.gguf"
+              }
+
+              private fun importLocalModel(uris: List<android.net.Uri>) {
+                  if (hasLoadedModel()) {
+                      Toast.makeText(this, "Unload the current model first", Toast.LENGTH_SHORT).show()
+                      return
+                  }
+                  if (downloadJob?.isActive == true || importJob?.isActive == true) {
+                      Toast.makeText(this, "Another model operation is running", Toast.LENGTH_SHORT).show()
+                      return
+                  }
+
+                  llDownloading.visibility = View.VISIBLE
+                  tvDownloadProgress.text = "0%"
+
+                  importJob = modelScope.launch {
+                      try {
+                          val folder = File(filesDir, "local_imports/${System.currentTimeMillis()}")
+                          if (!folder.mkdirs() && !folder.isDirectory) {
+                              error("Cannot create model folder")
+                          }
+
+                          val copied = mutableListOf<File>()
+                          for (uri in uris) {
+                              val name = File(queryModelFileName(uri)).name
+                              if (!name.endsWith(".gguf", ignoreCase = true)) continue
+                              val target = File(folder, name)
+                              val input = contentResolver.openInputStream(uri)
+                                  ?: error("Cannot read $name")
+                              input.use { source ->
+                                  target.outputStream().use { output -> source.copyTo(output) }
+                              }
+                              copied.add(target)
+                          }
+
+                          val modelFiles = copied.filterNot {
+                              it.name.startsWith("mmproj", ignoreCase = true)
+                          }
+                          val mmprojFiles = copied.filter {
+                              it.name.startsWith("mmproj", ignoreCase = true)
+                          }
+
+                          if (modelFiles.isEmpty()) {
+                              error("Select a GGUF model. Safetensors must first be converted to GGUF.")
+                          }
+                          if (mmprojFiles.size > 1) {
+                              error("Select only one mmproj GGUF file.")
+                          }
+
+                          val displayName = modelFiles.first().nameWithoutExtension
+                          val safeName = displayName.replace(Regex("[^A-Za-z0-9._-]"), "_")
+                          val modelName = "local/${safeName}_${System.currentTimeMillis()}"
+                          val modelType = if (mmprojFiles.isNotEmpty()) ModelType.VLM else ModelType.LLM
+
+                          var completed = false
+                          ModelManagerWrapper.pullFlow(
+                              ModelPullInput(
+                                  model_name = modelName,
+                                  hub = HubSource.LOCALFS,
+                                  local_path = folder.absolutePath,
+                                  model_type = modelType
+                              )
+                          ).collect { event ->
+                              when (event) {
+                                  is ModelManagerWrapper.PullEvent.Progress -> {
+                                      val total = event.files.sumOf {
+                                          if (it.total_bytes > 0) it.total_bytes else 0L
+                                      }
+                                      val done = event.files.sumOf { it.downloaded_bytes }
+                                      val percent = if (total > 0) (done * 100 / total).toInt() else 0
+                                      runOnUiThread { tvDownloadProgress.text = "$percent%" }
+                                  }
+                                  is ModelManagerWrapper.PullEvent.Completed -> completed = true
+                                  is ModelManagerWrapper.PullEvent.Error ->
+                                      error("Import failed (${event.code}): ${event.message}")
+                              }
+                          }
+
+                          if (!completed) error("Model import did not complete")
+
+                          val newModel = ModelData(
+                              id = modelName,
+                              displayName = displayName,
+                              modelName = modelName,
+                              type = if (modelType == ModelType.VLM) "vlm" else "llm",
+                              runtime = "llama_cpp",
+                              hub = "LOCALFS"
+                          )
+
+                          runOnUiThread {
+                              modelList = modelList + newModel
+                              refreshModelSpinner(newModel.id)
+                              Toast.makeText(this@MainActivity, "Model imported", Toast.LENGTH_LONG).show()
+                          }
+                      } catch (e: Exception) {
+                          Log.e(TAG, "Local model import failed", e)
+                          runOnUiThread {
+                              Toast.makeText(
+                                  this@MainActivity,
+                                  e.message ?: "Import failed",
+                                  Toast.LENGTH_LONG
+                              ).show()
+                          }
+                      } finally {
+                          runOnUiThread { llDownloading.visibility = View.GONE }
+                      }
+                  }
+              }
+
+          '''
+          marker = "    private fun parseModelList()"
+          if marker not in s:
+              raise SystemExit("parseModelList marker not found")
+          s = s.replace(marker, helper + marker, 1)
+          p.write_text(s)
+
+          # Connect the import button
+          patch(
+              "java/com/geniex/demo/MainActivity.kt",
+              "    private fun setListeners() {\n        btnAddImage.setOnClickListener {",
+              """    private fun setListeners() {
+                  btnImportModel.setOnClickListener {
+                      if (!hasLoadedModel()) {
+                          importModelPicker.launch(arrayOf("*/*"))
+                      } else {
+                          Toast.makeText(this, "Unload the current model first", Toast.LENGTH_SHORT).show()
+                      }
+                  }
+
+                  btnAddImage.setOnClickListener {"""
+          )
+
+          # Add button to the layout
+          patch(
+              "res/layout/activity_main.xml",
+              '            <Button\n                android:id="@+id/btn_load_model"',
+              '''            <Button
+                  android:id="@+id/btn_import_model"
+                  android:layout_width="wrap_content"
+                  android:layout_height="26dp"
+                  android:layout_marginEnd="8dp"
+                  android:background="@drawable/btn_rounded_border"
+                  android:text="Import GGUF"
+                  android:textAllCaps="false"
+                  android:textColor="#FFF1F1F1" />
+
+              <Button
+                  android:id="@+id/btn_load_model"'''
+          )
+
+          print("NG LLM: SDK 0.3.20 and local GGUF import patched")
+          PY
 
       - name: Setup Java
         uses: actions/setup-java@v4
