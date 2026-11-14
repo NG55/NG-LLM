@@ -399,6 +399,7 @@ jobs:
           PY
 
       
+      
       - name: Add NG LLM Settings
         working-directory: qai-hub-apps/geniex_chat_android
         shell: bash
@@ -437,14 +438,11 @@ jobs:
               "setListeners"
           )
 
-          import re
-
-pattern = r'\bnCtx\s*=\s*1024\b'
-replacement = 'nCtx = getSharedPreferences("ng_llm_settings", MODE_PRIVATE).getInt("context_length", 4096)'
-s, count = re.subn(pattern, replacement, s, count=1)
-
-if count != 1:
-    raise SystemExit("Cannot find LLM context length")
+          replace_once(
+              "                                nCtx = 1024,\n",
+              '                                nCtx = getSharedPreferences("ng_llm_settings", MODE_PRIVATE).getInt("context_length", 4096),\n',
+              "LLM context length"
+          )
 
           marker = "    private fun parseModelList()"
           if marker not in s:
@@ -480,6 +478,7 @@ if count != 1:
 
           x = layout.read_text()
           anchor = '            <Button\n                android:id="@+id/btn_download"'
+
           button = '''            <Button
                 android:id="@+id/btn_settings"
                 android:layout_width="wrap_content"
@@ -501,6 +500,7 @@ if count != 1:
 
           print("NG LLM Settings added successfully")
           PY
+
 
 
 
