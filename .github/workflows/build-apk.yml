@@ -631,7 +631,7 @@ jobs:
           lines[notify_index + 1:close_index] = scroll_code
 
           source = "\n".join(lines) + "\n"
-              pattern = r'(?ms)^    private fun reloadRecycleView\(\) \{\n.*?^    \}'
+          pattern = r'(?ms)^    private fun reloadRecycleView\(\) \{\n.*?^    \}'
           new = '''    private fun reloadRecycleView() {
           adapter.notifyDataSetChanged()
           binding.rvChat.post {
