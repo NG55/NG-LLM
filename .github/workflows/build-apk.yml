@@ -27,6 +27,42 @@ jobs:
           sparse-checkout: geniex_chat_android
           sparse-checkout-cone-mode: true
 
+      - name: Customize NG LLM
+        working-directory: qai-hub-apps/geniex_chat_android
+        shell: bash
+        run: |
+          set -e
+          python3 - <<'PY'
+          from pathlib import Path
+
+          root = Path("app/src/main")
+          manifest = root / "AndroidManifest.xml"
+          strings = root / "res/values/strings.xml"
+
+          if not manifest.exists() or not strings.exists():
+              raise SystemExit("Required Android files not found")
+
+          text = manifest.read_text()
+          old = "Theme.MaterialComponents.Light.NoActionBar"
+          if old not in text:
+              raise SystemExit("Original theme not found in manifest")
+          manifest.write_text(text.replace(
+              old, "Theme.MaterialComponents.NoActionBar"
+          ))
+
+          text = strings.read_text()
+          import re
+          text, count = re.subn(
+              r'(<string name="app_name">).*?(</string>)',
+              r'\1NG LLM\2',
+              text,
+              count=1
+          )
+          if count == 0:
+              raise SystemExit("app_name string not found")
+          strings.write_text(text)
+          PY
+
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
@@ -57,7 +93,7 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: NG-LLM-debug-apk
+          name: NG-LLM-alpha-debug-apk
           path: qai-hub-apps/geniex_chat_android/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 14
