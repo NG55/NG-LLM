@@ -120,7 +120,6 @@ jobs:
 
           print("NG LLM dark theme applied")
           PY
-
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
