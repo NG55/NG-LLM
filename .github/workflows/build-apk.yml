@@ -30,6 +30,7 @@ jobs:
       
       
       
+      
       - name: Customize NG LLM
         working-directory: qai-hub-apps/geniex_chat_android
         shell: bash
@@ -52,16 +53,14 @@ jobs:
               p.write_text(s.replace(old, new))
 
           p = res / "values/strings.xml"
-s = p.read_text()
-s, count = re.subn(
-    r'(<string name="app_name"[^>]*>).*?(</string>)',
-    r'\1NG LLM\2',
-    s,
-    count=1
-)
-if count == 0:
-    raise SystemExit("app_name not found")
-p.write_text(s)
+          s = p.read_text()
+          s, count = re.subn(
+              r'(<string name="app_name"[^>]*>).*?(</string>)',
+              r'\1NG LLM\2', s, count=1
+          )
+          if count == 0:
+              raise SystemExit("app_name not found")
+          p.write_text(s)
 
           p = res / "values/colors.xml"
           s = p.read_text()
@@ -74,56 +73,41 @@ p.write_text(s)
                   '    <color name="colorAccent">#FFB0B0B0</color>\n</resources>')
           p.write_text(s)
 
-          edit(
-              "res/drawable/btn_rounded_border.xml",
-              '<solid android:color="#FFFFFFFF" />',
-              '<solid android:color="#FF303030" />'
-          )
+          edit("res/drawable/btn_rounded_border.xml",
+               '<solid android:color="#FFFFFFFF" />',
+               '<solid android:color="#FF303030" />')
 
-          edit(
-              "res/drawable/bg_input_box_background.xml",
-              '<solid android:color="#ffffff" />',
-              '<solid android:color="#FF242424" />'
-          )
+          edit("res/drawable/bg_input_box_background.xml",
+               '<solid android:color="#ffffff" />',
+               '<solid android:color="#FF242424" />')
 
-          edit(
-              "res/layout/item_model.xml",
-              'android:textColor="#1F1F1F"',
-              'android:textColor="#FFF1F1F1"'
-          )
+          edit("res/layout/item_model.xml",
+               'android:textColor="#1F1F1F"',
+               'android:textColor="#FFF1F1F1"')
 
-          edit(
-              "res/layout/activity_main.xml",
-              'android:hint="Type prompt..."',
-              'android:hint="Type prompt..."\n                        android:textColor="#FFF1F1F1"'
-          )
+          edit("res/layout/activity_main.xml",
+               'android:hint="Type prompt..."',
+               'android:hint="Type prompt..."\n                        android:textColor="#FFF1F1F1"')
 
-          edit(
-              "src/main/AndroidManifest.xml",
-              'android:theme="@style/Theme.MaterialComponents.Light.NoActionBar"',
-              'android:theme="@style/Theme.GenieXDemo"'
-          )
+          edit("AndroidManifest.xml",
+               'android:theme="@style/Theme.MaterialComponents.Light.NoActionBar"',
+               'android:theme="@style/Theme.GenieXDemo"')
 
-          edit(
-              "res/values/themes.xml",
-              'parent="android:Theme.Material.Light.NoActionBar"',
-              'parent="Theme.MaterialComponents.NoActionBar"'
-          )
+          edit("res/values/themes.xml",
+               'parent="android:Theme.Material.Light.NoActionBar"',
+               'parent="Theme.MaterialComponents.NoActionBar"')
 
-          edit(
-              "res/values/themes.xml",
-              'parent="Theme.Design.Light.BottomSheetDialog"',
-              'parent="Theme.Design.BottomSheetDialog"'
-          )
+          edit("res/values/themes.xml",
+               'parent="Theme.Design.Light.BottomSheetDialog"',
+               'parent="Theme.Design.BottomSheetDialog"')
 
-          edit(
-              "java/com/geniex/demo/MainActivity.kt",
-              'statusBarColorInt(Color.WHITE)\n            statusBarDarkFont(true)',
-              'statusBarColorInt(Color.rgb(18, 18, 18))\n            statusBarDarkFont(false)'
-          )
+          edit("java/com/geniex/demo/MainActivity.kt",
+               'statusBarColorInt(Color.WHITE)\n            statusBarDarkFont(true)',
+               'statusBarColorInt(Color.rgb(18, 18, 18))\n            statusBarDarkFont(false)')
 
           print("NG LLM dark interface updated")
           PY
+
 
 
       - name: Setup Java
