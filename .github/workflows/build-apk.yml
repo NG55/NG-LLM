@@ -28,6 +28,7 @@ jobs:
           sparse-checkout-cone-mode: true
 
       
+      
       - name: Customize NG LLM
         working-directory: qai-hub-apps/geniex_chat_android
         shell: bash
@@ -37,89 +38,44 @@ jobs:
           from pathlib import Path
           import re
 
-          root = Path("src/main")
-          res = root / "res"
-
+          res = Path("src/main/res")
           strings = res / "values/strings.xml"
-          themes = res / "values/themes.xml"
           colors = res / "values/colors.xml"
 
-          for f in (strings, themes, colors):
-              if not f.exists():
-                  raise SystemExit(f"Missing file: {f}")
-
           text = strings.read_text()
-          text = re.sub(
+          text, n = re.subn(
               r'(<string name="app_name">).*?(</string>)',
               r'\1NG LLM\2', text, count=1
           )
-          strings.write_text(text)
+          if n:
+              strings.write_text(text)
 
-          text = themes.read_text()
-          text = text.replace(
-              "android:Theme.Material.Light.NoActionBar",
-              "android:Theme.Material.NoActionBar"
-          )
-          text = text.replace(
-              "Theme.Design.Light.BottomSheetDialog",
-              "Theme.Design.BottomSheetDialog"
-          )
-          themes.write_text(text)
+          if colors.exists():
+              text = colors.read_text()
+              replacements = {
+                  "bg_normal": "#FF121212",
+                  "font_black": "#FFF1F1F1",
+              }
+              for name, value in replacements.items():
+                  text = re.sub(
+                      rf'(<color name="{name}">).*?(</color>)',
+                      rf'\1{value}\2', text
+                  )
+              colors.write_text(text)
 
-          text = colors.read_text()
-          text = re.sub(
-              r'(<color name="bg_normal">).*?(</color>)',
-              r'\1#FF121212\2', text
-          )
-          text = re.sub(
-              r'(<color name="font_black">).*?(</color>)',
-              r'\1#FFF1F1F1\2', text
-          )
-          colors.write_text(text)
+          for folder in ("layout", "drawable"):
+              directory = res / folder
+              if not directory.exists():
+                  continue
+              for file in directory.rglob("*.xml"):
+                  text = file.read_text()
+                  text = text.replace("#F6F7F9", "#FF121212")
+                  text = text.replace("#E7E7E7", "#FF333333")
+                  file.write_text(text)
 
-          replacements = {
-              "#FFFFFFFF": "#FF242424",
-              "#FFFFFF": "#242424",
-              "#ffffff": "#242424",
-              "#FFF": "#242424",
-              "#F6F7F9": "#FF121212",
-              "#F5F5F5": "#FF242424",
-              "#E7E7E7": "#FF333333",
-              "#1F1F1F": "#FFF1F1F1",
-          }
-
-          for f in res.rglob("*.xml"):
-              text = f.read_text()
-
-              for attr in (
-                  "android:background",
-                  "android:backgroundTint",
-                  "app:backgroundTint"
-              ):
-                  pattern = rf'({attr}=")(#[0-9A-Fa-f]{{3,8}})(")'
-                  def dark_bg(m):
-                      value = m.group(2).upper()
-                      if value in (
-                          "#FFFFFF", "#FFFFFFFF", "#FFF",
-                          "#F6F7F9", "#F5F5F5"
-                      ):
-                          return m.group(1) + "#FF242424" + m.group(3)
-                      return m.group(0)
-                      # Preserve non-white backgrounds
-                  text = re.sub(pattern, dark_bg, text)
-
-              text = re.sub(
-                  r'(android:textColor=")#([89A-Fa-f][0-9A-Fa-f]{5,7})(")',
-                  r'\1#FFE0E0E0\3', text
-              )
-
-              for old, new in replacements.items():
-                  text = text.replace(old, new)
-
-              f.write_text(text)
-
-          print("NG LLM dark theme applied")
+          print("Safe dark resource updates completed")
           PY
+
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
