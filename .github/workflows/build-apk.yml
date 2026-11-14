@@ -30,7 +30,7 @@ jobs:
       
       
       
-     - name: Customize NG LLM
+      - name: Customize NG LLM
         working-directory: qai-hub-apps/geniex_chat_android
         shell: bash
         run: |
