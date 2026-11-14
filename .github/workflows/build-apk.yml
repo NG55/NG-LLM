@@ -147,7 +147,7 @@ jobs:
           s = p.read_text()
           s, n1 = re.subn(r"^\s*model_name = paths\.model_name,\n", "", s, flags=re.M)
           s, n2 = re.subn(r",\s*enable_thinking = enableThinking", "", s)
-          if n1 != 2 or n2 < 3:
+          if n1 != 2 or n2 != 2:
               raise SystemExit(f"Unexpected MainActivity API patterns: model_name={n1}, thinking={n2}")
           p.write_text(s)
 
