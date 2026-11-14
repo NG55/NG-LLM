@@ -504,7 +504,7 @@ jobs:
 
 
       
-      - name: Update Chat Colors and Auto Scroll
+            - name: Fix Chat Scrolling and Controls
         working-directory: qai-hub-apps/geniex_chat_android
         shell: bash
         run: |
@@ -512,32 +512,40 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import re
+          import textwrap
 
           root = Path("src/main")
           layout = root / "res/layout/activity_main.xml"
           ai_layout = root / "res/layout/item_ai_message.xml"
           activity = root / "java/com/geniex/demo/MainActivity.kt"
 
+          # Arrange all six controls into three visible rows.
           x = layout.read_text()
-          buttons = [
+          section = x.index("<!-- Control buttons section -->")
+          start = x.index("<LinearLayout", section)
+          end = x.index("</LinearLayout>", start) + len("</LinearLayout>")
+          old_row = x[start:end]
+
+          ids = [
               "btn_download",
               "btn_load_model",
-              "btn_clear_history",
-              "btn_send",
+              "btn_import_model",
+              "btn_settings",
+              "btn_unload_model",
+              "btn_stop",
           ]
 
-          for button_id in buttons:
-              marker = f'android:id="@+id/{button_id}"'
-              pos = x.find(marker)
-              if pos < 0:
-                  raise SystemExit(f"Button not found: {button_id}")
+          buttons = {}
+          for button_id in ids:
+              pattern = (
+                  r'<Button\b(?=[^>]*android:id="@\+id/'
+                  + re.escape(button_id) + r'")[^>]*/>'
+              )
+              match = re.search(pattern, old_row, re.S)
+              if not match:
+                  raise SystemExit(f"Button missing: {button_id}")
 
-              start = x.rfind("<Button", 0, pos)
-              end = x.find("/>", pos)
-              if start < 0 or end < 0:
-                  raise SystemExit(f"Invalid button XML: {button_id}")
-
-              block = x[start:end + 2]
+              block = match.group(0)
               block, count = re.subn(
                   r'android:textColor="#[^"]+"',
                   'android:textColor="#FFFFFFFF"',
@@ -545,20 +553,52 @@ jobs:
                   count=1
               )
               if count != 1:
-                  raise SystemExit(f"textColor not found: {button_id}")
+                  raise SystemExit(f"Text color missing: {button_id}")
 
-              x = x[:start] + block + x[end + 2:]
+              if "android:textStyle=" not in block:
+                  block = block.replace(
+                      "/>",
+                      'android:textStyle="bold" />'
+                  )
+              buttons[button_id] = textwrap.indent(block, "    ")
 
+          def row(*names, margin="0dp"):
+              content = "\n".join(buttons[name] for name in names)
+              return f'''            <LinearLayout
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:layout_marginTop="{margin}"
+                  android:gravity="center_vertical"
+                  android:orientation="horizontal">
+          {content}
+              </LinearLayout>'''
+
+          new_row = '''        <LinearLayout
+              android:layout_width="match_parent"
+              android:layout_height="wrap_content"
+              android:orientation="vertical">
+          ''' + row("btn_download", "btn_load_model") + "\n" + \
+              row("btn_import_model", "btn_settings", "4dp") + "\n" + \
+              row("btn_unload_model", "btn_stop", "4dp") + '''
+          </LinearLayout>'''
+
+          x = x[:start] + new_row + x[end:]
           layout.write_text(x)
 
+          # White assistant text. Markwon keeps Markdown headings and
+          # **bold** emphasis bold.
           a = ai_layout.read_text()
-          old = 'android:textColor="#1F1F1F"'
-          if old not in a:
-              raise SystemExit("AI message textColor not found")
-          ai_layout.write_text(
-              a.replace(old, 'android:textColor="#E57373"', 1)
+          a, count = re.subn(
+              r'android:textColor="#[^"]+"',
+              'android:textColor="#FFFFFFFF"',
+              a,
+              count=1
           )
+          if count != 1:
+              raise SystemExit("AI text color not found")
+          ai_layout.write_text(a)
 
+          # Scroll after RecyclerView has completed its next layout frame.
           lines = activity.read_text().splitlines()
           log_index = next(
               (i for i, line in enumerate(lines)
@@ -569,26 +609,52 @@ jobs:
               raise SystemExit("Token log not found")
 
           notify_index = next(
-              (i for i in range(log_index - 1, max(-1, log_index - 12), -1)
+              (i for i in range(log_index - 1, max(-1, log_index - 15), -1)
                if "adapter.notifyDataSetChanged()" in lines[i]),
               -1
           )
           if notify_index < 0:
               raise SystemExit("Token adapter update not found")
 
-          if "binding.rvChat.post" not in "\n".join(
-              lines[notify_index + 1:log_index]
-          ):
-              indent = lines[notify_index][:len(lines[notify_index]) -
-                                            len(lines[notify_index].lstrip())]
-              lines[notify_index + 1:notify_index + 1] = [
-                  indent + "binding.rvChat.post {",
-                  indent + "    binding.rvChat.scrollToPosition(adapter.itemCount - 1)",
-                  indent + "}",
-              ]
+          close_index = log_index - 1
+          if lines[close_index].strip() != "}":
+              raise SystemExit("Cannot locate end of token UI block")
 
-          activity.write_text("\n".join(lines) + "\n")
-          print("Chat colors and automatic scrolling updated")
+          indent = lines[notify_index][:len(lines[notify_index]) -
+                                        len(lines[notify_index].lstrip())]
+
+          scroll_code = [
+              indent + "binding.rvChat.post {",
+              indent + "    binding.rvChat.postOnAnimation {",
+              indent + "        val lastPosition = adapter.itemCount - 1",
+              indent + "        if (lastPosition >= 0) binding.rvChat.scrollToPosition(lastPosition)",
+              indent + "    }",
+              indent + "}",
+          ]
+          lines[notify_index + 1:close_index] = scroll_code
+
+          # Also make initial and completed-message scrolling layout-safe.
+          source = "\n".join(lines) + "\n"
+          old = '''    private fun reloadRecycleView() {
+                  adapter.notifyDataSetChanged()
+                  binding.rvChat.scrollToPosition(messages.size - 1)
+              }'''
+          new = '''    private fun reloadRecycleView() {
+                  adapter.notifyDataSetChanged()
+                  binding.rvChat.post {
+                      binding.rvChat.postOnAnimation {
+                          val lastPosition = adapter.itemCount - 1
+                          if (lastPosition >= 0) binding.rvChat.scrollToPosition(lastPosition)
+                      }
+                  }
+              }'''
+          if old in source:
+              source = source.replace(old, new, 1)
+          else:
+              raise SystemExit("reloadRecycleView block not found")
+
+          activity.write_text(source)
+          print("Chat scrolling, colors and controls updated")
           PY
 
       
