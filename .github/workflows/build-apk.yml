@@ -578,8 +578,8 @@ jobs:
               android:layout_height="wrap_content"
               android:orientation="vertical">
           ''' + row("btn_download", "btn_load_model") + "\n" + \
-              row("btn_import_model", "btn_settings", "4dp") + "\n" + \
-              row("btn_unload_model", "btn_stop", "4dp") + '''
+                  row("btn_import_model", "btn_settings", margin="4dp") + "\n" + \
+    row("btn_unload_model", "btn_stop", margin="4dp") + '''
           </LinearLayout>'''
 
           x = x[:start] + new_row + x[end:]
