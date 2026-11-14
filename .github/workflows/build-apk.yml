@@ -437,11 +437,14 @@ jobs:
               "setListeners"
           )
 
-          replace_once(
-              "nCtx=1024,",
-              'nCtx = getSharedPreferences("ng_llm_settings", MODE_PRIVATE).getInt("context_length", 4096),',
-              "LLM context length"
-          )
+          import re
+
+pattern = r'\bnCtx\s*=\s*1024\b'
+replacement = 'nCtx = getSharedPreferences("ng_llm_settings", MODE_PRIVATE).getInt("context_length", 4096)'
+s, count = re.subn(pattern, replacement, s, count=1)
+
+if count != 1:
+    raise SystemExit("Cannot find LLM context length")
 
           marker = "    private fun parseModelList()"
           if marker not in s:
