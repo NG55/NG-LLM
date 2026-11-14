@@ -51,11 +51,17 @@ jobs:
                   raise SystemExit(f"Pattern not found in {p}: {old}")
               p.write_text(s.replace(old, new))
 
-          edit(
-              "res/values/strings.xml",
-              '<string name="app_name">GenieX</string>',
-              '<string name="app_name">NG LLM</string>'
-          ) if "GenieX" in (res / "values/strings.xml").read_text() else None
+          p = res / "values/strings.xml"
+s = p.read_text()
+s, count = re.subn(
+    r'(<string name="app_name"[^>]*>).*?(</string>)',
+    r'\1NG LLM\2',
+    s,
+    count=1
+)
+if count == 0:
+    raise SystemExit("app_name not found")
+p.write_text(s)
 
           p = res / "values/colors.xml"
           s = p.read_text()
