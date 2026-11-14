@@ -105,6 +105,14 @@ jobs:
                'statusBarColorInt(Color.WHITE)\n            statusBarDarkFont(true)',
                'statusBarColorInt(Color.rgb(18, 18, 18))\n            statusBarDarkFont(false)')
 
+          gradle_file = Path("build.gradle")
+          gradle_text = gradle_file.read_text()
+          old = "implementation 'com.qualcomm.qti:geniex-android:0.3.5'"
+          new = "implementation 'com.qualcomm.qti:geniex-android:0.10.0'"
+          if old not in gradle_text:
+              raise SystemExit("SDK dependency not found")
+          gradle_file.write_text(gradle_text.replace(old, new, 1))
+
           print("NG LLM dark interface updated")
           PY
 
