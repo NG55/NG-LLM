@@ -511,6 +511,7 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
           root = Path("src/main")
           layout = root / "res/layout/activity_main.xml"
@@ -518,7 +519,6 @@ jobs:
           activity = root / "java/com/geniex/demo/MainActivity.kt"
 
           x = layout.read_text()
-
           buttons = [
               "btn_download",
               "btn_load_model",
@@ -538,7 +538,6 @@ jobs:
                   raise SystemExit(f"Invalid button XML: {button_id}")
 
               block = x[start:end + 2]
-              import re
               block, count = re.subn(
                   r'android:textColor="#[^"]+"',
                   'android:textColor="#FFFFFFFF"',
@@ -560,25 +559,39 @@ jobs:
               a.replace(old, 'android:textColor="#E57373"', 1)
           )
 
-          s = activity.read_text()
-          old = '''                    adapter.notifyDataSetChanged()
-                }
-                Log.d(TAG, "Token: ${streamResult.text}")'''
+          lines = activity.read_text().splitlines()
+          log_index = next(
+              (i for i, line in enumerate(lines)
+               if 'Log.d(TAG, "Token:' in line),
+              -1
+          )
+          if log_index < 0:
+              raise SystemExit("Token log not found")
 
-          new = '''                    adapter.notifyDataSetChanged()
-                    binding.rvChat.post {
-                        binding.rvChat.scrollToPosition(adapter.itemCount - 1)
-                    }
-                }
-                Log.d(TAG, "Token: ${streamResult.text}")'''
+          notify_index = next(
+              (i for i in range(log_index - 1, max(-1, log_index - 12), -1)
+               if "adapter.notifyDataSetChanged()" in lines[i]),
+              -1
+          )
+          if notify_index < 0:
+              raise SystemExit("Token adapter update not found")
 
-          if old not in s:
-              raise SystemExit("Streaming token update block not found")
+          if "binding.rvChat.post" not in "\n".join(
+              lines[notify_index + 1:log_index]
+          ):
+              indent = lines[notify_index][:len(lines[notify_index]) -
+                                            len(lines[notify_index].lstrip())]
+              lines[notify_index + 1:notify_index + 1] = [
+                  indent + "binding.rvChat.post {",
+                  indent + "    binding.rvChat.scrollToPosition(adapter.itemCount - 1)",
+                  indent + "}",
+              ]
 
-          activity.write_text(s.replace(old, new, 1))
-
+          activity.write_text("\n".join(lines) + "\n")
           print("Chat colors and automatic scrolling updated")
           PY
+
+      
 
 
 
