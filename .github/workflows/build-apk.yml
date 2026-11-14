@@ -503,6 +503,85 @@ jobs:
 
 
 
+      
+      - name: Update Chat Colors and Auto Scroll
+        working-directory: qai-hub-apps/geniex_chat_android
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          root = Path("src/main")
+          layout = root / "res/layout/activity_main.xml"
+          ai_layout = root / "res/layout/item_ai_message.xml"
+          activity = root / "java/com/geniex/demo/MainActivity.kt"
+
+          x = layout.read_text()
+
+          buttons = [
+              "btn_download",
+              "btn_load_model",
+              "btn_clear_history",
+              "btn_send",
+          ]
+
+          for button_id in buttons:
+              marker = f'android:id="@+id/{button_id}"'
+              pos = x.find(marker)
+              if pos < 0:
+                  raise SystemExit(f"Button not found: {button_id}")
+
+              start = x.rfind("<Button", 0, pos)
+              end = x.find("/>", pos)
+              if start < 0 or end < 0:
+                  raise SystemExit(f"Invalid button XML: {button_id}")
+
+              block = x[start:end + 2]
+              import re
+              block, count = re.subn(
+                  r'android:textColor="#[^"]+"',
+                  'android:textColor="#FFFFFFFF"',
+                  block,
+                  count=1
+              )
+              if count != 1:
+                  raise SystemExit(f"textColor not found: {button_id}")
+
+              x = x[:start] + block + x[end + 2:]
+
+          layout.write_text(x)
+
+          a = ai_layout.read_text()
+          old = 'android:textColor="#1F1F1F"'
+          if old not in a:
+              raise SystemExit("AI message textColor not found")
+          ai_layout.write_text(
+              a.replace(old, 'android:textColor="#E57373"', 1)
+          )
+
+          s = activity.read_text()
+          old = '''                    adapter.notifyDataSetChanged()
+                }
+                Log.d(TAG, "Token: ${streamResult.text}")'''
+
+          new = '''                    adapter.notifyDataSetChanged()
+                    binding.rvChat.post {
+                        binding.rvChat.scrollToPosition(adapter.itemCount - 1)
+                    }
+                }
+                Log.d(TAG, "Token: ${streamResult.text}")'''
+
+          if old not in s:
+              raise SystemExit("Streaming token update block not found")
+
+          activity.write_text(s.replace(old, new, 1))
+
+          print("Chat colors and automatic scrolling updated")
+          PY
+
+
+
 
       - name: Setup Java
         uses: actions/setup-java@v4
