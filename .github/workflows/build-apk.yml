@@ -29,7 +29,8 @@ jobs:
 
       
       
-      - name: Customize NG LLM
+      
+     - name: Customize NG LLM
         working-directory: qai-hub-apps/geniex_chat_android
         shell: bash
         run: |
@@ -38,43 +39,86 @@ jobs:
           from pathlib import Path
           import re
 
-          res = Path("src/main/res")
-          strings = res / "values/strings.xml"
-          colors = res / "values/colors.xml"
+          root = Path("src/main")
+          res = root / "res"
 
-          text = strings.read_text()
-          text, n = re.subn(
-              r'(<string name="app_name">).*?(</string>)',
-              r'\1NG LLM\2', text, count=1
+          def edit(path, old, new):
+              p = root / path
+              if not p.exists():
+                  raise SystemExit(f"Missing: {p}")
+              s = p.read_text()
+              if old not in s:
+                  raise SystemExit(f"Pattern not found in {p}: {old}")
+              p.write_text(s.replace(old, new))
+
+          edit(
+              "res/values/strings.xml",
+              '<string name="app_name">GenieX</string>',
+              '<string name="app_name">NG LLM</string>'
+          ) if "GenieX" in (res / "values/strings.xml").read_text() else None
+
+          p = res / "values/colors.xml"
+          s = p.read_text()
+          s = re.sub(r'(<color name="bg_normal">).*?(</color>)',
+                     r'\1#FF121212\2', s)
+          s = re.sub(r'(<color name="font_black">).*?(</color>)',
+                     r'\1#FFF1F1F1\2', s)
+          if '<color name="colorAccent">' not in s:
+              s = s.replace('</resources>',
+                  '    <color name="colorAccent">#FFB0B0B0</color>\n</resources>')
+          p.write_text(s)
+
+          edit(
+              "res/drawable/btn_rounded_border.xml",
+              '<solid android:color="#FFFFFFFF" />',
+              '<solid android:color="#FF303030" />'
           )
-          if n:
-              strings.write_text(text)
 
-          if colors.exists():
-              text = colors.read_text()
-              replacements = {
-                  "bg_normal": "#FF121212",
-                  "font_black": "#FFF1F1F1",
-              }
-              for name, value in replacements.items():
-                  text = re.sub(
-                      rf'(<color name="{name}">).*?(</color>)',
-                      rf'\1{value}\2', text
-                  )
-              colors.write_text(text)
+          edit(
+              "res/drawable/bg_input_box_background.xml",
+              '<solid android:color="#ffffff" />',
+              '<solid android:color="#FF242424" />'
+          )
 
-          for folder in ("layout", "drawable"):
-              directory = res / folder
-              if not directory.exists():
-                  continue
-              for file in directory.rglob("*.xml"):
-                  text = file.read_text()
-                  text = text.replace("#F6F7F9", "#FF121212")
-                  text = text.replace("#E7E7E7", "#FF333333")
-                  file.write_text(text)
+          edit(
+              "res/layout/item_model.xml",
+              'android:textColor="#1F1F1F"',
+              'android:textColor="#FFF1F1F1"'
+          )
 
-          print("Safe dark resource updates completed")
+          edit(
+              "res/layout/activity_main.xml",
+              'android:hint="Type prompt..."',
+              'android:hint="Type prompt..."\n                        android:textColor="#FFF1F1F1"'
+          )
+
+          edit(
+              "src/main/AndroidManifest.xml",
+              'android:theme="@style/Theme.MaterialComponents.Light.NoActionBar"',
+              'android:theme="@style/Theme.GenieXDemo"'
+          )
+
+          edit(
+              "res/values/themes.xml",
+              'parent="android:Theme.Material.Light.NoActionBar"',
+              'parent="Theme.MaterialComponents.NoActionBar"'
+          )
+
+          edit(
+              "res/values/themes.xml",
+              'parent="Theme.Design.Light.BottomSheetDialog"',
+              'parent="Theme.Design.BottomSheetDialog"'
+          )
+
+          edit(
+              "java/com/geniex/demo/MainActivity.kt",
+              'statusBarColorInt(Color.WHITE)\n            statusBarDarkFont(true)',
+              'statusBarColorInt(Color.rgb(18, 18, 18))\n            statusBarDarkFont(false)'
+          )
+
+          print("NG LLM dark interface updated")
           PY
+
 
       - name: Setup Java
         uses: actions/setup-java@v4
