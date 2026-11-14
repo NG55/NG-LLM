@@ -631,16 +631,16 @@ jobs:
           lines[notify_index + 1:close_index] = scroll_code
 
           source = "\n".join(lines) + "\n"
-          pattern = r'(?ms)^    private fun reloadRecycleView\(\) \{\n.*?^    \}'
+                    pattern = r'(?ms)^    private fun reloadRecycleView\(\) \{\n.*?^    \}'
           new = '''    private fun reloadRecycleView() {
-        adapter.notifyDataSetChanged()
-        binding.rvChat.post {
-            binding.rvChat.postOnAnimation {
-                val lastPosition = adapter.itemCount - 1
-                if (lastPosition >= 0) binding.rvChat.scrollToPosition(lastPosition)
-            }
-        }
-    }'''
+          adapter.notifyDataSetChanged()
+          binding.rvChat.post {
+              binding.rvChat.postOnAnimation {
+                  val lastPosition = adapter.itemCount - 1
+                  if (lastPosition >= 0) binding.rvChat.scrollToPosition(lastPosition)
+              }
+          }
+          }'''
 
           source, count = re.subn(pattern, lambda _: new, source, count=1)
           if count != 1:
