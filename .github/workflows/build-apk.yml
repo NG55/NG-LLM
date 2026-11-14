@@ -504,6 +504,7 @@ jobs:
 
 
       
+      
       - name: Fix Chat Scrolling and Controls
         working-directory: qai-hub-apps/geniex_chat_android
         shell: bash
@@ -519,7 +520,6 @@ jobs:
           ai_layout = root / "res/layout/item_ai_message.xml"
           activity = root / "java/com/geniex/demo/MainActivity.kt"
 
-          # Arrange all six controls into three visible rows.
           x = layout.read_text()
           section = x.index("<!-- Control buttons section -->")
           start = x.index("<LinearLayout", section)
@@ -579,14 +579,12 @@ jobs:
               android:orientation="vertical">
           ''' + row("btn_download", "btn_load_model") + "\n" + \
                   row("btn_import_model", "btn_settings", margin="4dp") + "\n" + \
-    row("btn_unload_model", "btn_stop", margin="4dp") + '''
+                  row("btn_unload_model", "btn_stop", margin="4dp") + '''
           </LinearLayout>'''
 
           x = x[:start] + new_row + x[end:]
           layout.write_text(x)
 
-          # White assistant text. Markwon keeps Markdown headings and
-          # **bold** emphasis bold.
           a = ai_layout.read_text()
           a, count = re.subn(
               r'android:textColor="#[^"]+"',
@@ -598,7 +596,6 @@ jobs:
               raise SystemExit("AI text color not found")
           ai_layout.write_text(a)
 
-          # Scroll after RecyclerView has completed its next layout frame.
           lines = activity.read_text().splitlines()
           log_index = next(
               (i for i, line in enumerate(lines)
@@ -633,14 +630,9 @@ jobs:
           ]
           lines[notify_index + 1:close_index] = scroll_code
 
-          # Also make initial and completed-message scrolling layout-safe.
           source = "\n".join(lines) + "\n"
-          old = '''    private fun reloadRecycleView() {
-                  adapter.notifyDataSetChanged()
-                  binding.rvChat.scrollToPosition(messages.size - 1)
-              }'''
           pattern = r'(?ms)^    private fun reloadRecycleView\(\) \{\n.*?^    \}'
-new = '''    private fun reloadRecycleView() {
+          new = '''    private fun reloadRecycleView() {
         adapter.notifyDataSetChanged()
         binding.rvChat.post {
             binding.rvChat.postOnAnimation {
@@ -650,15 +642,14 @@ new = '''    private fun reloadRecycleView() {
         }
     }'''
 
-source, count = re.subn(pattern, lambda _: new, source, count=1)
-if count != 1:
-    raise SystemExit("reloadRecycleView block not found")
+          source, count = re.subn(pattern, lambda _: new, source, count=1)
+          if count != 1:
+              raise SystemExit("reloadRecycleView block not found")
 
           activity.write_text(source)
           print("Chat scrolling, colors and controls updated")
           PY
 
-      
 
 
 
