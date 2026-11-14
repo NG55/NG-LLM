@@ -116,7 +116,7 @@ jobs:
           print("NG LLM dark interface updated")
           PY
 
-       - name: Add GGUF import and update GenieX SDK
+      - name: Add GGUF import and update GenieX SDK
         working-directory: qai-hub-apps/geniex_chat_android
         shell: bash
         run: |
